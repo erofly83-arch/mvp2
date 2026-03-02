@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Прайс-менеджер</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='central' text-anchor='middle' font-size='80'%3E%F0%9F%92%B2%3C/text%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<!-- External libraries -->
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+
+<div class="app-layout">
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="app-sidebar">
+  <div class="sidebar-brand" style="cursor:pointer;" title="Свернуть/развернуть меню" onclick="toggleSidebar()">
+    <div class="sidebar-brand-icon">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 3h18v4H3zM3 9h11v4H3zM3 15h11v4H3zM16 9h5v10h-5z"/></svg>
+    </div>
+    <div>
+      <div class="sidebar-brand-text">Прайс-менеджер</div>
+      <div class="sidebar-brand-sub">Мониторинг цен</div>
+    </div>
+  </div>
+  <button class="sidebar-toggle" id="sidebarToggle" title="Свернуть меню" onclick="toggleSidebar()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"></polyline>
+    </svg>
+  </button>
+  <nav class="sidebar-nav" id="appNav">
+    <div class="sidebar-section-label">Работа</div>
+    <button class="nav-tab" data-pane="prepare" id="navPrepare" data-label="Подготовка файлов">
+      <span class="nav-tab-icon">📋</span><span class="nav-tab-label"> Подготовка файлов</span>
+    </button>
+    <button class="nav-tab active" data-pane="monitor" id="navMonitor" data-label="Мониторинг цен">
+      <span class="nav-tab-icon">📊</span><span class="nav-tab-label"> Мониторинг цен</span>
+    </button>
+    <div class="sidebar-section-label">База данных</div>
+    <button class="nav-tab" data-pane="matcher" id="navMatcher" data-label="Матчинг">
+      <span class="nav-tab-icon">🔍</span><span class="nav-tab-label"> Матчинг</span>
+    </button>
+    <button class="nav-tab" data-pane="jsoneditor" id="navJsoneditor" data-label="База синонимов">
+      <span class="nav-tab-icon">📚</span><span class="nav-tab-label"> База синонимов</span>
+    </button>
+  </nav>
+
+  <!-- Информация о загруженных файлах -->
+  <div class="sidebar-files-section" id="sidebarFilesSection">
+    <div class="sidebar-files-title">Загруженные файлы</div>
+
+    <!-- JSON файл -->
+    <div class="sidebar-file-item sidebar-file-item--empty" id="sfJsonItem">
+      <div class="sf-row">
+        <span class="sf-icon">📋</span>
+        <span class="sf-name" id="sfJsonName">JSON не загружен</span>
+        <span class="sf-type sf-type--json" id="sfJsonBadge" style="display:none;">JSON</span>
+      </div>
+      <div class="sf-meta" id="sfJsonMeta" style="display:none;"></div>
+    </div>
+
+    <!-- Мой прайс -->
+    <div class="sidebar-file-item sidebar-file-item--empty" id="sfMyPriceItem">
+      <div class="sf-row">
+        <span class="sf-icon">🏷️</span>
+        <span class="sf-name" id="sfMyPriceName">Мой прайс не загружен</span>
+        <span class="sf-type sf-type--myprice" id="sfMyPriceBadge" style="display:none;">Прайс</span>
+      </div>
+      <div class="sf-meta" id="sfMyPriceMeta" style="display:none;"></div>
+    </div>
+
+    <!-- Поставщики -->
+    <div class="sidebar-files-title" style="margin-top:6px;margin-bottom:4px;">Поставщики</div>
+    <div id="sfSuppliersEmpty" class="sidebar-file-item sidebar-file-item--empty">
+      <div class="sf-row">
+        <span class="sf-icon">📦</span>
+        <span class="sf-empty-label">Файлы поставщиков не загружены</span>
+      </div>
+    </div>
+    <div class="sidebar-files-suppliers-list" id="sfSuppliersList" style="display:none;"></div>
+  </div><!-- /sidebar-files-section -->
+
+  <div class="sidebar-footer">
+    <span id="unifiedUnsaved" class="unified-unsaved" title="Несохранённые изменения в базе синонимов">● Не сохранено</span>
+  </div>
+</aside>
+<!-- ═══ MAIN CONTENT ═══ -->
+<div class="app-main">
+
+<!-- ═══ PANE: PREPARE (OBREZATEL) ═══ -->
+<div id="pane-prepare" class="main-pane">
+
+  <!-- Main editor container (always visible) -->
+  <div class="obr-container" id="obrTableContainer">
+
+    <!-- Loaded files list -->
+    <div id="obr-loaded-files" style="display:none;background:#e8f4ef;border-bottom:1px solid #8fcfb0;padding:5px 14px;font-size:var(--fz-sm);color:#1a5c38;gap:6px;flex-wrap:wrap;align-items:center;">
+      <span style="font-weight:700;">Загружено в мониторинг:</span>
+      <div id="obr-loaded-list" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    </div>
+
+    <!-- Hidden file inputs (JS references these) -->
+    <div style="display:none;" aria-hidden="true">
+      <input type="file" id="obrFileInput" accept=".xlsx,.xls,.xlsb,.xlsm,.xml,.csv,.ods,.fods,.txt,.dbf,.dif,.sylk,.prn" multiple>
+      <input type="file" id="obrFileInputMyPrice" accept=".xlsx,.xls,.xlsb,.xlsm,.xml,.csv,.ods,.fods,.txt,.dbf,.dif,.sylk,.prn">
+      <input type="file" id="obrJsonUploadInput" accept=".json">
+    </div>
+
+    <!-- Toolbar — main editing actions -->
+    <div class="xl-toolbar" style="background:var(--surface-alt);border-bottom:1px solid var(--border);">
+      <!-- Имя файла и тип -->
+      <span class="obr-type-badge" id="obrTypeBadge" style="display:none;background:var(--c-green);color:#fff;border-radius:3px;padding:2px 8px;font-size:var(--fz-xs);font-weight:700;white-space:nowrap;">Поставщик</span>
+      <span style="font-size:var(--fz-sm);color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px;" id="obrFileNameDisplay"></span>
+      <!-- Листы -->
+      <div class="xl-sheets" id="obrSheetSelector" style="margin-left:auto;">
+        <label for="obrSheetSelect" style="font-size:var(--fz-sm);color:#555;">Лист:</label>
+        <select id="obrSheetSelect" style="padding:3px 6px;border:1px solid var(--c-border);border-radius:var(--radius);font-size:var(--fz-sm);font-family:inherit;background:#fff;"></select>
+      </div>
+    </div>
+
+    <!-- Toolbar — кнопки в стиле мониторинга -->
+    <div class="xl-toolbar">
+      <div class="xl-group">
+        <button class="xl-btn xl-btn-accent" id="obrDownloadBtn" disabled
+          data-tip="Сохранить CSV и передать в мониторинг.">
+          <span class="xl-icon">✅</span> Готово — сохранить и передать в мониторинг
+        </button>
+      </div>
+      <div class="xl-toolbar-sep"></div>
+      <div class="xl-group">
+        <button class="xl-btn" id="obrResetBtn" data-tip="Снять выделение со всех колонок.">
+          <span class="xl-icon">↩️</span> Снять выделение колонок
+        </button>
+      </div>
+      <div class="xl-toolbar-sep"></div>
+      <div class="xl-group">
+        <button class="xl-btn" id="obrManageTemplatesBtn" data-tip="Редактировать список наименований колонок и синонимы.">
+          <span class="xl-icon">🏷️</span> Настройка названий колонок
+        </button>
+      </div>
+      <div class="xl-toolbar-sep"></div>
+      <div class="xl-group" id="obrComplexBtnGroup" style="display:none;">
+        <button class="xl-btn" id="obrComplexConfigBtn" data-tip="Настройка подзаголовков сложного прайса.">
+          <span class="xl-icon">🔍</span> Подзаголовки
+        </button>
+      </div>
+      <div class="xl-toolbar-sep" id="obrComplexSep" style="display:none;"></div>
+      <div class="xl-group" style="margin-left:auto;">
+        <button class="xl-btn" id="obrShowSkippedBtn" disabled
+          data-tip="Просмотреть пропущенные строки последнего экспорта.">
+          <span class="xl-icon">⚠️</span> Проверить пропущенные строки
+        </button>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="xl-statusbar">
+      <div class="xl-stat" data-tip="Всего столбцов">Столбцов: <b id="obrTotalColumns">0</b></div>
+      <div class="xl-stat" data-tip="Выбрано для CSV">Выбрано: <b id="obrSelectedColumns">0</b></div>
+      <div class="xl-stat" data-tip="Строк в итоговом CSV">Строк: <b id="obrTotalRows">0</b></div>
+      <div id="obrQueueStatus" style="margin-left:auto;display:none;" class="xl-stat"></div>
+    </div>
+
+    <!-- Queue progress panel -->
+    <div id="obrQueuePanel" style="display:none;">
+      <div class="obr-queue-bar">
+        <div class="obr-queue-bar-left">
+          <span class="obr-queue-icon">📋</span>
+          <div class="obr-queue-info">
+            <div class="obr-queue-title">Пакетная обработка</div>
+            <div class="obr-queue-current" id="obrQueueCurrent"></div>
+          </div>
+        </div>
+        <div class="obr-queue-bar-center">
+          <div class="obr-queue-progress-wrap">
+            <div class="obr-queue-progress-fill" id="obrQueueProgressFill"></div>
+          </div>
+          <div class="obr-queue-chips" id="obrQueueList"></div>
+        </div>
+        <div class="obr-queue-bar-right">
+          <span class="obr-queue-counter" id="obrQueueProgressLabel"></span>
+          <button class="obr-queue-skip-btn" id="obrQueueSkipBtn" title="Пропустить файл">⏭ Пропустить</button>
+        </div>
+      </div>
+    </div>
+    <!-- Initial / memory-cleared state -->
+    <div class="obr-cleared-hint" id="obrClearedHint">
+      <div class="obr-cleared-inner">
+        <div style="font-size:40px;margin-bottom:12px;" id="obrClearedIcon">📂</div>
+        <h3 id="obrClearedTitle">Подготовка файлов</h3>
+        <p id="obrClearedDesc">Сначала загрузите JSON — он применит настройки столбцов и базу синонимов. Затем откройте прайс для настройки.</p>
+        <div class="obr-cleared-btns">
+          <button class="btn btn-success" id="obrClearedJsonBtn" style="position:relative;" title="Загрузить JSON с настройками столбцов и синонимами">
+            📋 Загрузить JSON
+            <input type="file" id="obrClearedJsonInput" accept=".json" style="position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%;">
+          </button>
+          <button class="btn" id="obrClearedSupplierBtn" style="position:relative;">
+            📦 Прайс поставщика
+            <input type="file" id="obrClearedFileInput" accept=".xlsx,.xls,.xlsb,.xlsm,.xml,.csv,.ods,.fods,.txt,.dbf,.dif,.sylk,.prn" multiple style="position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%;">
+          </button>
+          <button class="btn" id="obrClearedMyPriceBtn" style="position:relative;">
+            🏷️ Мой прайс
+            <input type="file" id="obrClearedFileInputMyPrice" accept=".xlsx,.xls,.xlsb,.xlsm,.xml,.csv,.ods,.fods,.txt,.dbf,.dif,.sylk,.prn" style="position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%;">
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hint / пустое состояние -->
+    <div class="xl-hint" id="obrMainHint" style="display:none;"></div>
+
+
+
+    <!-- Complex banner -->
+    <div class="complex-banner" id="obrComplexBanner">
+      <span>🔶 <b>Сложный прайслист</b> — обнаружены строки-подзаголовки.</span>
+      <button class="complex-banner-btn" id="obrComplexEnableBtn">Включить режим подзаголовков</button>
+      <button class="complex-dismiss" id="obrComplexDismiss" title="Скрыть">✕</button>
+    </div>
+
+    <!-- Table -->
+    <div class="xl-table-wrap" id="obrTableWrap">
+      <table id="obrDataTable"></table>
+    </div>
+
+    <!-- Load more -->
+    <div class="xl-load-more" id="obrLoadMoreContainer" style="display:none;">
+      <button class="btn" id="obrLoadMoreBtn" data-tip="Показать все строки.">
+        Показать все строки (ещё <span id="obrRemainingRows">0</span>)
+      </button>
+    </div>
+
+  </div><!-- /obrTableContainer -->
+</div><!-- /pane-prepare -->
+
+<!-- ═══ PANE: MONITOR ═══ -->
+<div id="pane-monitor" class="main-pane active">
+<div class="container">
+
+  <!-- Компактная верхняя панель -->
+  <div class="monitor-topbar">
+    <!-- Слот: JSON / Синонимы -->
+    <div class="monitor-topbar-slot monitor-slot--json">
+      <div class="monitor-slot-header">
+        <span class="monitor-slot-icon">📋</span>
+        <span class="monitor-slot-label">База синонимов</span>
+      </div>
+      <div id="synonymsStatus" class="monitor-slot-status" style="margin-bottom:6px;">Не загружена</div>
+      <div class="monitor-slot-actions">
+        <div class="monitor-slot-file-btn" title="Загрузить JSON (штрихкоды, бренды, настройки)">
+          <span>⬆️</span> Загрузить
+          <input type="file" id="synonymsInput" accept=".json"/>
+        </div>
+        <button id="unifiedSaveJsonBtn" class="monitor-slot-dl-btn" title="Скачать объединённый JSON">⬇️ Скачать</button>
+      </div>
+    </div>
+
+    <!-- Слот: Мой прайс -->
+    <div class="monitor-topbar-slot monitor-slot--myp">
+      <div class="monitor-slot-header">
+        <span class="monitor-slot-icon">🏷️</span>
+        <span class="monitor-slot-label">Мой прайс</span>
+      </div>
+      <div id="myPriceStatus" class="monitor-slot-status" style="margin-bottom:6px;">Не загружен</div>
+      <div class="monitor-slot-file-btn" title="Загрузить ваш прайс-файл">
+        <span>📄</span> Загрузить файл
+        <input type="file" id="myPriceInput" accept=".csv,.xlsx,.xls"/>
+      </div>
+    </div>
+
+    <!-- Слот: Поставщики -->
+    <div class="monitor-topbar-slot monitor-slot--sup" style="flex:1.4;">
+      <div class="monitor-slot-header">
+        <span class="monitor-slot-icon">📦</span>
+        <span class="monitor-slot-label">Прайсы поставщиков</span>
+      </div>
+      <div id="competitorStatus" class="monitor-slot-status" style="margin-bottom:4px;">Не загружены</div>
+      <div id="monitorSupplierFileList" class="sup-file-list" style="display:none;margin-bottom:4px;"></div>
+      <div class="monitor-slot-file-btn" title="Загрузить файлы поставщиков (несколько)">
+        <span>📁</span> Загрузить файлы
+        <input type="file" id="competitorInput" multiple accept=".csv,.xlsx,.xls"/>
+      </div>
+    </div>
+
+    <!-- Статистика -->
+    <div class="monitor-stats-bar" id="infoPanel">
+      <div class="monitor-stat-item">
+        <div class="monitor-stat-val" id="productCount">—</div>
+        <div class="monitor-stat-lbl">Товаров</div>
+      </div>
+      <div class="monitor-stat-item">
+        <div class="monitor-stat-val" id="fileCount">—</div>
+        <div class="monitor-stat-lbl">Файлов</div>
+      </div>
+      <div class="monitor-stat-item">
+        <div class="monitor-stat-val" id="columnCount">—</div>
+        <div class="monitor-stat-lbl">Колонок</div>
+      </div>
+      <div class="monitor-stat-item">
+        <div class="monitor-stat-val" id="matchCount">—</div>
+        <div class="monitor-stat-lbl">Совпадений</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="controls-group">
+      <span class="controls-group-label">🔍 Фильтры</span>
+      <button id="sortMatchesBtn" class="btn btn-secondary" disabled title="Совпадения в нескольких файлах"><span class="icon">🔄</span> Совпадения</button>
+      <button id="bigDiffBtn" class="btn btn-secondary" disabled title="Большая разница цен"><span class="icon">📊</span> Большая разница</button>
+      <button id="showMyPriceBtn" class="btn btn-secondary" disabled title="Только мой прайс">Мой прайс</button>
+      <button id="maxCoverageBtn" class="btn btn-secondary" disabled title="Поиск новинок"><span class="icon">📊</span> Поиск новинок</button>
+      <button id="compactMatchesBtn" class="btn btn-secondary" disabled title="Компактный вид"><span class="icon">⊟</span> Компактный вид</button>
+    </div>
+    <div class="controls-group export-group">
+      <span class="controls-group-label">💾 Экспорт</span>
+      <button id="exportMyPriceBtn" class="btn btn-success" disabled title="Мой прайс Excel"><span class="icon">💾</span> Мой прайс</button>
+      <button id="exportAllBtn" class="btn btn-success" disabled title="Все данные Excel"><span class="icon">💾</span> Всё</button>
+      <button id="exportCurrentBtn" class="btn btn-success" disabled title="Текущий вид Excel"><span class="icon">💾</span> Текущий вид</button>
+    </div>
+    <div class="controls-group danger-group">
+      <span class="controls-group-label">⚠️ Очистка</span>
+      <button id="clearBtn" class="btn btn-danger" disabled title="Сбросить все данные"><span class="icon">🗑️</span> Сбросить всё</button>
+    </div>
+  </div>
+
+  <div id="hiddenColumnsPanel" class="hidden-columns">
+    <span class="hidden-columns-label">🔍 Скрытые колонки:</span>
+    <div id="hiddenColumnsList"></div>
+  </div>
+
+  <div class="search-box search-box--above-table">
+    <input type="text" id="searchInput" class="search-input" placeholder="Поиск по названию товара...">
+  </div>
+
+  <div id="tableContainer">
+    <div class="empty-state">
+      <div class="empty-state-icon">📦</div>
+      <h3>Загрузите прайс-листы</h3>
+      <p>Загрузите ваш прайс и файлы поставщиков для сравнения.<br>Или подготовьте файлы на вкладке «Подготовка файлов».</p>
+    </div>
+  </div>
+</div>
+</div><!-- /pane-monitor -->
+
+<!-- ═══ PANE: MATCHER ═══ -->
+<div id="pane-matcher" class="main-pane">
+  <div class="container">
+    <div class="matcher-toolbar">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;">
+        <span style="font-size:14px;font-weight:700;color:#1f1f1f;">🔍 Матчинг по наименованию</span>
+        <span class="matcher-badge" id="matcherBadge" style="display:none;"></span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" id="matcherRunBtn" title="Запустить матчинг">▶ Запустить матчинг</button>
+        <button class="btn btn-secondary" id="matcherHideKnownBtn" style="display:none;">🔗 Скрыть уже связанные</button>
+      </div>
+    </div>
+    <div class="mf-panel" id="matcherFilesPanel" style="display:none;">
+      <div id="matcherJsonRow" style="display:none;margin-bottom:4px;">
+        <div class="mf-panel-section-label">База синонимов</div>
+        <label class="mf-json-row" id="matcherJsonToggleRow" title="Включить/отключить использование базы синонимов при матчинге">
+          <input type="checkbox" id="matcherJsonEnabled" class="mf-json-toggle" checked>
+          <span class="mf-json-label" id="matcherJsonLabel"><strong>JSON не загружен</strong></span>
+        </label>
+      </div>
+      <div class="mf-panel-section-label">Файлы прайсов</div>
+      <div id="matcherFileChips" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+    </div>
+    <div class="matcher-stats" id="matcherStats" style="display:none;">
+      <div class="mstat active" data-mv="all"><div class="mstat-val" id="ms-all">0</div><div class="mstat-lbl">Все пары</div></div>
+      <div class="mstat" data-mv="high"><div class="mstat-val" id="ms-high">0</div><div class="mstat-lbl">≥80% высокие</div></div>
+      <div class="mstat" data-mv="mid"><div class="mstat-val" id="ms-mid">0</div><div class="mstat-lbl">52–79%</div></div>
+    </div>
+    <div id="matcherSearchRow" style="display:none;margin:6px 0 4px;">
+      <input class="search-input" id="matcherSearchInp" placeholder="Поиск по названию / штрихкоду..." style="width:100%;" disabled>
+    </div>
+    <div id="matcherProgress" style="display:none;padding:8px 0;">
+      <div style="font-size:11px;color:#555;margin-bottom:4px;" id="matcherProgressLbl">Анализ...</div>
+      <div style="height:5px;background:#e8e8e8;border-radius:3px;"><div id="matcherProgressFill" style="height:100%;width:0%;background:#217346;border-radius:3px;transition:width .2s;"></div></div>
+    </div>
+    <div class="table-wrapper" id="matcherTableWrap" style="display:none;margin-top:8px;">
+      <table id="matcherTable">
+        <thead><tr>
+          <th style="width:32px;">#</th>
+          <th style="width:46px;">%</th>
+          <th style="width:110px;">Источник</th>
+          <th>Наименование</th>
+          <th style="width:135px;">Штрихкод</th>
+          <th style="width:60px;">Тип</th>
+          <th style="width:38px;"></th>
+        </tr></thead>
+        <tbody id="matcherTbody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="matcherEmpty">
+      <div class="empty-state-icon">🔍</div>
+      <h3>Запустите матчинг</h3>
+      <p>Загрузите прайсы на вкладке «Мониторинг», затем нажмите «Запустить матчинг»</p>
+    </div>
+  </div>
+</div><!-- /pane-matcher -->
+
+<!-- ═══ PANE: JSON EDITOR ═══ -->
+<div id="pane-jsoneditor" class="main-pane">
+<div class="container">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+    <span style="font-size:15px;font-weight:700;">📚 База синонимов</span>
+  </div>
+  <div class="syn-subtab-bar">
+    <div class="syn-subtab active" data-subtab="barcodes" id="subtab-barcodes">🔢 Штрихкоды <span id="bcCountBadge" class="subtab-badge subtab-badge--green">0</span></div>
+    <div class="syn-subtab" data-subtab="brands" id="subtab-brands">🏷️ Бренды <span id="brandCountBadge" class="subtab-badge subtab-badge--purple">0</span></div>
+  </div>
+
+  <!-- Barcodes subtab -->
+  <div class="syn-subtab-pane active" id="subpane-barcodes">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:6px 0 8px;border-bottom:1px solid var(--border);margin-bottom:4px;">
+      <button class="btn" id="jeExportXlsxBtn" disabled>📊 Экспорт Excel</button>
+      <button class="btn" id="jeImportXlsxBtn">📥 Импорт Excel</button>
+      <input type="file" id="jeXlsxFileIn" accept=".xlsx,.xls" style="display:none;">
+      <div style="width:1px;height:22px;background:var(--border);margin:0 2px;"></div>
+      <button class="btn btn-secondary" id="jeUndoBtn" disabled title="Ctrl+Z">↩️ Отменить</button>
+      <button class="btn btn-secondary" id="jeRedoBtn" disabled title="Ctrl+Y">↪️ Повторить</button>
+      <div style="width:1px;height:22px;background:var(--border);margin:0 2px;"></div>
+      <button class="btn btn-danger" id="jeClearBtn" disabled>🗑 Очистить</button>
+      <div style="width:1px;height:22px;background:var(--border);margin:0 2px;"></div>
+      <button class="btn btn-success" id="jeDownloadJsonBtn" onclick="downloadCurrentSynonyms()" title="Скачать обновлённый JSON с базой синонимов">⬇️ Скачать JSON</button>
+    </div>
+    <div class="je-newrow">
+      <span style="font-size:11px;font-weight:700;color:#555;white-space:nowrap;">Новая группа:</span>
+      <input class="je-inp" id="jeNName" placeholder="Название товара" style="flex:2;min-width:160px;">
+      <input class="je-inp je-mono" id="jeNMainBC" placeholder="Главный ШК" style="flex:1;min-width:120px;">
+      <input class="je-inp je-mono" id="jeNSyns" placeholder="Синонимы через запятую" style="flex:2;min-width:180px;">
+      <button class="btn btn-success" id="jeCreateBtn">➕ Добавить</button>
+      <button class="btn" id="jeClearFormBtn">Сбросить</button>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center;font-size:11px;color:#666;padding:4px 2px;">
+      <span id="jeStatus">Наименований: 0</span>
+      <span id="jeDupStatus" style="color:#d93025;display:none;"></span>
+    </div>
+    <div class="search-box--above-table je-search-row">
+      <input class="search-input" id="jeSearchInp" placeholder="Поиск по ШК / названию..." disabled>
+    </div>
+    <div class="table-wrapper" id="jeTableWrap" style="margin-top:0;max-height:60vh;padding-bottom:60px;">
+      <div class="empty-state" id="jeEmpty">
+        <div class="empty-state-icon">📦</div>
+        <h3>База пуста</h3>
+        <p>Загрузите JSON или создайте группы вручную</p>
+      </div>
+      <table id="jeTable" style="display:none;table-layout:fixed;width:100%;">
+        <thead><tr>
+          <th style="width:36px;">#</th>
+          <th style="min-width:260px;">Название</th>
+          <th style="width:160px;">Главный ШК</th>
+          <th>Синонимы ШК <span style="font-weight:400;font-size:10px;color:rgba(255,255,255,0.65)">(Enter для добавления)</span></th>
+          <th style="width:40px;"></th>
+        </tr></thead>
+        <tbody id="jeTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Brands subtab -->
+  <div class="syn-subtab-pane" id="subpane-brands">
+    <div class="brand-subtab-toolbar">
+      <button class="btn btn-success" id="brandOpenAddModalBtn">➕ Добавить бренд</button>
+      <div style="width:1px;height:22px;background:var(--border);margin:0 2px;"></div>
+      <button class="btn btn-success" id="brandDownloadJsonBtn" onclick="downloadCurrentSynonyms()" title="Скачать обновлённый JSON с базой брендов">⬇️ Скачать JSON</button>
+      <div style="width:1px;height:22px;background:var(--border);margin:0 2px;"></div>
+      <button class="btn btn-danger" id="brandClearAllBtn" title="Очистить словарь брендов">🗑️ Очистить всё</button>
+    </div>
+    <div class="brand-search-row search-box--above-table">
+      <input class="search-input" id="brandSearchInp" placeholder="Поиск по брендам, синонимам, антонимам...">
+    </div>
+    <div class="brand-empty" id="brandEmpty">
+      <div style="font-size:32px;margin-bottom:8px;">🏷️</div>
+      <div>Словарь брендов пуст.<br>Добавьте бренд вручную.</div>
+    </div>
+    <div id="brandTableWrap" style="display:none;">
+      <table id="brandDataTable" class="data-table">
+        <colgroup>
+          <col class="col-num">
+          <col class="col-canon">
+          <col class="col-syns">
+          <col class="col-ants">
+          <col class="col-acts">
+        </colgroup>
+        <thead>
+          <tr>
+            <th style="width:36px;">#</th>
+            <th style="width:160px;">Канонический бренд</th>
+            <th>Синонимы</th>
+            <th style="width:30%;">Антонимы</th>
+            <th style="width:64px;text-align:center;">Действия</th>
+          </tr>
+        </thead>
+        <tbody id="brandList"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</div><!-- /pane-jsoneditor -->
+
+
+<!-- ═══ TOAST ═══ -->
+<div id="toastRack"></div>
+
+
+<!-- ═══ BRAND EDIT MODAL ═══ -->
+<div class="brand-edit-modal" id="brandEditModal">
+  <div class="brand-edit-inner">
+    <div class="brand-edit-header">
+      <span>✏️ Редактировать бренд</span>
+      <button onclick="brandCloseEdit()" class="modal-close-x">✕</button>
+    </div>
+    <div class="brand-edit-body">
+      <input type="hidden" id="beEditKey">
+      <div class="brand-edit-field"><label for="beCanon">Канонический бренд *</label><input id="beCanon" placeholder="tchibo"></div>
+      <div class="brand-edit-field"><label for="beSyns">Синонимы (через запятую)</label><textarea id="beSyns" rows="3" placeholder="чибо, тибио, тчибо"></textarea></div>
+      <div class="brand-edit-field"><label for="beAnti" style="color:#c0392b;">Антонимы (через запятую)</label><textarea id="beAnti" rows="3" placeholder="нескафе, якобс"></textarea></div>
+    </div>
+    <div class="brand-edit-footer">
+      <button class="btn" onclick="brandCloseEdit()">Отмена</button>
+      <button class="btn btn-success" onclick="brandSaveEdit()">✔ Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MATCH CONFIRM MODAL ═══ -->
+<div id="matchConfirmModal" class="modal-overlay" style="z-index:10000;">
+  <div class="modal-inner w640">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-weight:700;font-size:14px;">🔗 Добавить в базу синонимов</span>
+        <div class="modal-tabs">
+          <div id="mcTabSyn" onclick="mcSwitchTab('syn')" class="modal-tab">Штрихкоды</div>
+          <div id="mcTabBrand" onclick="mcSwitchTab('brand')" class="modal-tab inactive">Бренды</div>
+        </div>
+      </div>
+      <button onclick="closeMatchModal()" class="modal-close-x">✕</button>
+    </div>
+    <div id="mcPaneSyn" style="padding:16px;">
+      <div style="margin-bottom:12px;font-size:13px;"><span id="mcScore"></span></div>
+      <div id="mcAction" style="font-size:12px;color:#555;margin-bottom:12px;padding:6px 10px;background:#f0f7f2;border-radius:3px;border-left:3px solid #217346;"></div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+        <thead><tr>
+          <th style="background:var(--c-green);color:#fff;border:1px solid var(--c-green-dark);padding:5px 8px;text-align:left;width:90px;">Источник</th>
+          <th style="background:var(--c-green);color:#fff;border:1px solid var(--c-green-dark);padding:5px 8px;text-align:left;">Наименование</th>
+          <th style="background:var(--c-green);color:#fff;border:1px solid var(--c-green-dark);padding:5px 8px;text-align:left;width:140px;white-space:nowrap;">Штрихкод</th>
+        </tr></thead>
+        <tbody>
+          <tr><td id="mc-src1" style="border:1px solid #d8d8d8;padding:5px 8px;border-top:2px solid #5a9e7a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;"></td><td id="mc-name1" style="border:1px solid #d8d8d8;padding:5px 8px;border-top:2px solid #5a9e7a;word-break:break-word;"></td><td id="mc-bc1" style="border:1px solid #d8d8d8;padding:5px 8px;border-top:2px solid #5a9e7a;font-family:monospace;font-size:11px;white-space:nowrap;"></td></tr>
+          <tr><td id="mc-src2" style="border:1px solid #d8d8d8;padding:5px 8px;background:#f8fbf9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;"></td><td id="mc-name2" style="border:1px solid #d8d8d8;padding:5px 8px;background:#f8fbf9;word-break:break-word;"></td><td id="mc-bc2" style="border:1px solid #d8d8d8;padding:5px 8px;background:#f8fbf9;font-family:monospace;font-size:11px;white-space:nowrap;"></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="mcPaneBrand" style="display:none;padding:16px;">
+      <div style="background:#fffaed;border:1px solid #f0d060;border-radius:4px;padding:7px 12px;margin-bottom:12px;font-size:11px;color:#7d5a00;line-height:1.5;">⚠️ После добавления бренда нажмите <b>▶ Запустить матчинг</b> повторно.</div>
+      <div id="mcbSuggestRow" style="display:none;margin-bottom:10px;background:#f0faf2;border:1px solid #b8d8c8;border-radius:4px;padding:7px 10px;font-size:11px;color:#155724;"><b>Предложения:</b> <span id="mcbSuggestTags" style="margin-left:4px;"></span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div><label style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:4px;" for="mcbCanon">Канонический бренд *</label><input id="mcbCanon" type="text" placeholder="напр. nescafe" style="width:100%;height:28px;padding:0 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;font-family:inherit;box-sizing:border-box;"></div>
+        <div><label style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:4px;" for="mcbSyns">Синонимы (через запятую)</label><input id="mcbSyns" type="text" placeholder="нескафе, nestle..." style="width:100%;height:28px;padding:0 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;font-family:inherit;box-sizing:border-box;"></div>
+        <div style="grid-column:1/-1;"><label style="font-size:10px;font-weight:700;color:#c0392b;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:4px;" for="mcbAnti">Антонимы (через запятую)</label><input id="mcbAnti" type="text" placeholder="tchibo, jakobs..." style="width:100%;height:28px;padding:0 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;font-family:inherit;box-sizing:border-box;"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="mcbSaveBtn" class="btn btn-success">💾 Сохранить бренд</button>
+        <span id="mcbStatus" style="font-size:11px;color:#555;"></span>
+      </div>
+    </div>
+    <div id="mcFooter" class="modal-footer" style="position:sticky;bottom:0;">
+      <button onclick="closeMatchModal()" class="btn">Отмена</button>
+      <button id="mcOkBtn" onclick="confirmMatchAction()" class="btn btn-success">Подтвердить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ XLS IMPORT MODAL ═══ -->
+<div id="jeXlsModal" class="modal-overlay" style="z-index:10001;">
+  <div class="modal-inner w400">
+    <div class="modal-header">
+      <span>Режим импорта Excel</span>
+      <button onclick="jeXlsModalClose(null)" class="modal-close-x">✕</button>
+    </div>
+    <div class="modal-body-pad">
+      <p id="jeXlsModalMsg" style="margin-bottom:14px;font-size:13px;line-height:1.5;"></p>
+      <div class="modal-footer" style="flex-direction:column;justify-content:stretch;">
+        <button class="btn btn-success" onclick="jeXlsModalClose('overwrite')">♻️ Перезаписать существующие</button>
+        <button class="btn btn-secondary" onclick="jeXlsModalClose('skip')" style="background:#6c757d;color:#fff;border-color:#6c757d;">⏭ Пропустить существующие</button>
+        <button class="btn" onclick="jeXlsModalClose('merge')" style="background:#0d6efd;color:#fff;border-color:#0d6efd;">🔀 Объединить синонимы</button>
+        <button class="btn" onclick="jeXlsModalClose(null)" style="margin-top:4px;">Отмена</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CONFIRM DIALOG ═══ -->
+<div id="jeConfirmModal" class="modal-overlay" style="z-index:10002;">
+  <div class="modal-inner w380">
+    <div class="modal-header">
+      <span id="jeConfirmTitle">Подтверждение</span>
+      <button onclick="jeConfirmClose(false)" class="modal-close-x">✕</button>
+    </div>
+    <div class="modal-body-pad"><p id="jeConfirmMsg" style="font-size:13px;line-height:1.6;"></p></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="jeConfirmClose(false)">Отмена</button>
+      <button class="btn btn-success" onclick="jeConfirmClose(true)">Подтвердить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BC ADD MODAL ═══ -->
+<div id="bcAddModal">
+  <div class="bc-modal-inner">
+    <div class="bc-modal-header">
+      <span>📚 Добавить штрихкод в базу синонимов</span>
+      <button id="bcAddCloseX" class="modal-close-x">✕</button>
+    </div>
+    <div class="bc-modal-body">
+      <div class="bc-modal-field"><label for="bcAddMainBC">Главный штрихкод</label><input id="bcAddMainBC" readonly style="background:#f0f0f0;color:#555;cursor:default;"><span class="hint">Штрихкод из вашего прайса</span></div>
+      <div class="bc-modal-field"><label for="bcAddName">Название товара</label><input id="bcAddName" placeholder="Введите или отредактируйте..."></div>
+      <div class="bc-modal-suppliers"><div class="bc-modal-suppliers-title">Штрихкоды поставщиков (синонимы)</div><div id="bcAddSynList"></div></div>
+    </div>
+    <div class="bc-modal-footer">
+      <button class="btn" id="bcAddCancelBtn">Отмена</button>
+      <button class="btn btn-success" id="bcAddSaveBtn">📚 Сохранить в базу</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ OBREZATEL MODALS ═══ -->
+
+<!-- Templates/Columns modal -->
+<div class="obr-modal" id="obrTemplatesModal">
+  <div class="obr-modal-box">
+    <div class="obr-modal-titlebar">
+      <span style="display:flex;align-items:center;gap:8px;">
+        🏷️ Названия колонок
+        <span id="colSettingsSourceBadge" class="col-settings-source-badge col-settings-source-badge--demo">📋 демо-данные</span>
+      </span>
+      <button class="btn btn-xs" id="obrCloseTemplatesModal" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);">✕ Закрыть</button>
+    </div>
+    <div class="obr-modal-body">
+      <!-- Мануал по распознаванию колонок -->
+      <div class="col-detect-manual">
+        <button class="col-detect-manual-toggle" id="colDetectManualToggle">
+          <span id="colDetectManualArrow">▶</span> Как называть колонки для автораспознавания?
+        </button>
+        <div class="col-detect-manual-body" id="colDetectManualBody">
+          <div class="col-detect-section" style="background:var(--amber-bg);">
+            <div class="col-detect-section-title">⚠️ Важно</div>
+            <div style="font-size:var(--fz-sm);line-height:1.6;color:var(--text-primary);">
+              Программа ищет нужные колонки по ключевым словам в их <b>названии</b>.
+              Если ваша колонка названа как-то нестандартно — добавьте её название как синоним в список ниже.
+            </div>
+          </div>
+          <div class="col-detect-section">
+            <div class="col-detect-section-title">📊 Мониторинг цен — автоопределение колонок</div>
+            <div class="col-detect-row"><span class="col-detect-label">Штрихкод</span><span class="col-detect-keywords"><span class="col-detect-kw">штрихкод</span><span class="col-detect-kw">штрих-код</span><span class="col-detect-kw">barcode</span><span class="col-detect-kw">ean</span><span class="col-detect-kw">ean13</span><span class="col-detect-kw">шк</span><span class="col-detect-kw">код</span><span class="col-detect-kw">артикул</span><span class="col-detect-kw">sku</span></span></div>
+            <div class="col-detect-row"><span class="col-detect-label">Наименование</span><span class="col-detect-keywords"><span class="col-detect-kw">название</span><span class="col-detect-kw">наименование</span><span class="col-detect-kw">name</span><span class="col-detect-kw">товар</span><span class="col-detect-kw">продукт</span><span class="col-detect-kw">описание</span><span class="col-detect-kw">title</span></span></div>
+            <div class="col-detect-row"><span class="col-detect-label">Цена</span><span class="col-detect-keywords"><span class="col-detect-kw">цена</span><span class="col-detect-kw">price</span><span class="col-detect-kw">стоимость</span><span class="col-detect-kw">прайс</span><span class="col-detect-kw">опт</span><span class="col-detect-kw">оптов</span><span class="col-detect-kw">розн</span><span class="col-detect-kw">ррц</span><span class="col-detect-kw">рц</span><span class="col-detect-kw">retail</span><span class="col-detect-kw">wholesale</span></span></div>
+            <div class="col-detect-row"><span class="col-detect-label">Остаток</span><span class="col-detect-keywords"><span class="col-detect-kw">остаток</span><span class="col-detect-kw">остатки</span><span class="col-detect-kw">наличие</span><span class="col-detect-kw">склад</span></span></div>
+            <div class="col-detect-row"><span class="col-detect-label">В пути</span><span class="col-detect-keywords"><span class="col-detect-kw">в пути</span><span class="col-detect-kw">транзит</span><span class="col-detect-kw">transit</span></span></div>
+          </div>
+          <div class="col-detect-section">
+            <div class="col-detect-section-title">🔤 Матчинг по наименованию — поиск штрихкода</div>
+            <div class="col-detect-row"><span class="col-detect-label">Штрихкод</span><span class="col-detect-keywords"><span class="col-detect-kw">штрихкод</span><span class="col-detect-kw">штрих-код</span><span class="col-detect-kw">barcode</span><span class="col-detect-kw">шк</span><span class="col-detect-kw">ean</span><span class="col-detect-kw">код</span></span></div>
+            <div class="col-detect-row"><span class="col-detect-label">Наименование</span><span class="col-detect-keywords"><span class="col-detect-kw">название</span><span class="col-detect-kw">наименование</span><span class="col-detect-kw">name</span><span class="col-detect-kw">товар</span><span class="col-detect-kw">продукт</span><span class="col-detect-kw">наим</span></span></div>
+          </div>
+          <div class="col-detect-section" style="background:var(--accent-lite);">
+            <div style="font-size:var(--fz-sm);line-height:1.6;color:var(--accent-dark);">
+              💡 <b>Совет:</b> если колонка не распознаётся — проверьте её название в вашем прайсе и добавьте его как синоним к нужному типу ниже. Например, если цена называется «Вход» — добавьте «вход» в синонимы к «Цена».
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Демо-баннер -->
+      <div id="colSettingsDemoBanner" style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius-md);padding:9px 14px;margin-bottom:12px;font-size:var(--fz-md);color:#92400E;line-height:1.5;">
+        📋 <b>Демо-данные.</b> Сейчас отображается встроенный набор колонок. При сохранении JSON они запишутся в файл автоматически — в следующий раз загрузите этот файл и ваши настройки восстановятся.
+      </div>
+      <div id="colSettingsFileBanner" style="display:none;background:var(--green-bg);border:1px solid #A7F3D0;border-radius:var(--radius-md);padding:9px 14px;margin-bottom:12px;font-size:var(--fz-md);color:var(--green-dark);line-height:1.5;">
+        ✅ <b>Настройки из файла.</b> Загружены из вашего JSON. Изменения будут сохранены при следующем сохранении JSON.
+      </div>
+      <div class="obr-modal-note">
+        <p><b>Что это?</b> Список стандартных названий колонок — «Штрихкод», «Наименование», «Цена» и т.д.</p>
+        <ul>
+          <li>Добавьте нужное название — оно появится в списке при выборе колонки.</li>
+          <li>У каждого названия есть <b>синонимы</b> — слова для автоматического нахождения колонки в прайсе.</li>
+          <li>Стрелки ↑↓ меняют порядок и приоритет.</li>
+        </ul>
+        <div class="obr-save-note">💾 Настройки сохраняются в JSON (кнопка «Скачать» в карточке «Синонимы» → мониторинг).</div>
+      </div>
+      <div class="tpl-add">
+        <input id="obrNewTemplateInput" type="text" placeholder="Название новой колонки, например: Артикул">
+        <button class="btn btn-success" id="obrAddTemplateBtn">+ Добавить</button>
+      </div>
+      <div id="obrTemplatesList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Skipped rows modal -->
+<div class="obr-modal" id="obrSkippedModal">
+  <div class="obr-modal-box">
+    <div class="obr-modal-titlebar">
+      <span>⚠️ Пропущенные строки</span>
+      <button class="btn btn-xs" id="obrCloseSkippedModal" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);">✕ Закрыть</button>
+    </div>
+    <div class="obr-modal-body">
+      <div id="obrSkippedSummary" class="skipped-sum"></div>
+      <div class="skipped-wrap"><table class="skipped-table" id="obrSkippedTable"></table></div>
+      <p style="font-size:12px;color:#737373;margin-top:8px;">CSV будет скачан даже при наличии пропусков.</p>
+    </div>
+    <div class="obr-modal-footer">
+      <button class="btn" id="obrDownloadSkippedBtn">📋 Показать все пропуски</button>
+      <button id="obrConfirmDownloadCsvBtn" style="display:none;"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Complex subheaders modal -->
+<div class="obr-modal" id="obrComplexModal">
+  <div class="obr-modal-box complex-modal-box">
+    <div class="obr-modal-titlebar">
+      <span>🔍 Настройка подзаголовков</span>
+      <button class="btn btn-xs" id="obrCloseComplexModal" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);">✕ Закрыть</button>
+    </div>
+    <div class="obr-modal-body">
+      <div class="complex-note"><b>Как работает:</b> ниже перечислены строки-подзаголовки, найденные в прайсе. Кликните по токену, чтобы добавлять его перед наименованием.</div>
+      <div id="obrComplexSummaryDiv" class="complex-summary" style="display:none;"></div>
+      <div id="obrComplexSubheaderList" class="subheader-list"></div>
+      <p id="obrComplexNoData" style="display:none;color:#888;font-size:13px;">Подзаголовков не найдено. Убедитесь, что выбраны колонки «Штрихкод» и «Наименование».</p>
+    </div>
+    <div class="obr-modal-footer">
+      <button class="btn" id="obrComplexResetBtn">↩ Сбросить всё</button>
+      <button class="btn btn-success" id="obrComplexApplyBtn">✓ Применить</button>
+    </div>
+  </div>
+</div>
+
+<!-- BRAND ADD MODAL -->
+<div id="brandAddModal" class="modal-overlay" style="z-index:10010;">
+  <div class="modal-inner w560">
+    <div class="modal-header">
+      <span>➕ Добавить новый бренд</span>
+      <button id="brandAddModalCloseX" class="modal-close-x">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field modal-field--green">
+        <label for="brNCanon">Канонический бренд <span style="color:#c0392b;">*</span></label>
+        <input id="brNCanon" placeholder="например: tchibo" autocomplete="off">
+        <span class="hint">Главное написание — ключ в словаре</span>
+      </div>
+      <div class="modal-field modal-field--blue">
+        <label for="brNSyns">Синонимы (через запятую)</label>
+        <textarea id="brNSyns" rows="3" placeholder="чибо, тибио, tchibo coffee"></textarea>
+      </div>
+      <div class="modal-field modal-field--red">
+        <label for="brNAnti">Антонимы (через запятую)</label>
+        <textarea id="brNAnti" rows="3" placeholder="нескафе, якобс, монарх"></textarea>
+      </div>
+      <span id="brandFormError" style="color:#c0392b;font-size:12px;display:none;"></span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="brandClearFormBtn">✕ Очистить</button>
+      <button class="btn" id="brandAddModalCancel">Отмена</button>
+      <button class="btn btn-success" id="brandAddBtn">✔ Сохранить бренд</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ NEXT-STEP MODAL (after OBR save) ═══ -->
+<div id="obrNextStepModal">
+  <div class="obr-nextstep-box">
+    <div class="obr-nextstep-title" id="obrNextStepTitle">✅ Файл сохранён!</div>
+    <div class="obr-nextstep-sub" id="obrNextStepSub">Что делаем дальше?</div>
+    <div class="obr-nextstep-btns" id="obrNextStepBtns"></div>
+    <button class="obr-nextstep-skip" onclick="obrCloseNextStep()">Закрыть</button>
+  </div>
+</div>
+
+
+</div><!-- /app-main -->
+</div><!-- /app-layout -->
+
+<!-- Application modules (core must load before matcher) -->
+<script src="core.js" defer></script>
+<script src="matcher.js" defer></script>
+</body></html>
