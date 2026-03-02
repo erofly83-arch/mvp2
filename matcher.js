@@ -879,3 +879,7 @@ function updateMatchPairTags() {
   if (document.querySelector('.nav-tab[data-pane="matcher"].active')) renderMatcherTable();
 }
 
+// ── Expose matcher globals (must be here since these functions live in matcher.js)
+window.closeMatchModal = closeMatchModal;
+window.confirmMatchAction = confirmMatchAction;
+

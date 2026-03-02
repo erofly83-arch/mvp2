@@ -4367,8 +4367,7 @@ function saveBcAddModal() {
 
 
 // ── Expose globals
-window.closeMatchModal = closeMatchModal;
-window.confirmMatchAction = confirmMatchAction;
+// Note: closeMatchModal and confirmMatchAction are exposed in matcher.js
 window.jeConfirmClose = jeConfirmClose;
 window.jeXlsModalClose = jeXlsModalClose;
 window.brandOpenEdit = brandOpenEdit;
